@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "emotion_engine": {
+      "command": "python",
+      "args": ["emotion_engine/server.py"],
+      "env": {},
+      "disabled": false,
+      "autoApprove": ["get_emotional_state", "update_emotion"]
+    }
+  }
+}

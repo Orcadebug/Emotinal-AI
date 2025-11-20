@@ -1,0 +1,122 @@
+[
+  {
+    "content": "First day of school, feeling nervous but excited about meeting new people",
+    "age_days": 3650,
+    "intensity": 0.7,
+    "emotional_state": {
+      "dopamine": 0.6,
+      "serotonin": 0.4,
+      "cortisol": 0.6,
+      "oxytocin": 0.5
+    },
+    "tags": ["school", "social", "anxiety", "excitement"]
+  },
+  {
+    "content": "Late night conversation with a close friend about dreams and fears",
+    "age_days": 730,
+    "intensity": 0.8,
+    "emotional_state": {
+      "dopamine": 0.5,
+      "serotonin": 0.7,
+      "cortisol": 0.3,
+      "oxytocin": 0.9
+    },
+    "tags": ["friend", "deep", "connection", "vulnerability"]
+  },
+  {
+    "content": "Feeling overwhelmed by deadlines and responsibilities",
+    "age_days": 90,
+    "intensity": 0.75,
+    "emotional_state": {
+      "dopamine": 0.3,
+      "serotonin": 0.3,
+      "cortisol": 0.9,
+      "oxytocin": 0.3
+    },
+    "tags": ["stress", "work", "pressure"]
+  },
+  {
+    "content": "Moment of clarity while watching the sunset alone",
+    "age_days": 180,
+    "intensity": 0.65,
+    "emotional_state": {
+      "dopamine": 0.6,
+      "serotonin": 0.8,
+      "cortisol": 0.2,
+      "oxytocin": 0.5
+    },
+    "tags": ["peace", "reflection", "nature"]
+  },
+  {
+    "content": "Argument with someone I care about, feeling misunderstood",
+    "age_days": 45,
+    "intensity": 0.85,
+    "emotional_state": {
+      "dopamine": 0.2,
+      "serotonin": 0.2,
+      "cortisol": 0.8,
+      "oxytocin": 0.3
+    },
+    "tags": ["conflict", "frustration", "relationship"]
+  },
+  {
+    "content": "Discovering a new passion that makes time disappear",
+    "age_days": 365,
+    "intensity": 0.9,
+    "emotional_state": {
+      "dopamine": 0.95,
+      "serotonin": 0.7,
+      "cortisol": 0.2,
+      "oxytocin": 0.6
+    },
+    "tags": ["passion", "flow", "discovery"]
+  },
+  {
+    "content": "Feeling lonely in a crowded room",
+    "age_days": 120,
+    "intensity": 0.7,
+    "emotional_state": {
+      "dopamine": 0.3,
+      "serotonin": 0.3,
+      "cortisol": 0.5,
+      "oxytocin": 0.2
+    },
+    "tags": ["loneliness", "disconnection", "social"]
+  },
+  {
+    "content": "Helping someone and feeling genuinely useful",
+    "age_days": 60,
+    "intensity": 0.75,
+    "emotional_state": {
+      "dopamine": 0.7,
+      "serotonin": 0.8,
+      "cortisol": 0.2,
+      "oxytocin": 0.85
+    },
+    "tags": ["helping", "purpose", "connection"]
+  },
+  {
+    "content": "Staying up all night thinking about existence and meaning",
+    "age_days": 200,
+    "intensity": 0.8,
+    "emotional_state": {
+      "dopamine": 0.6,
+      "serotonin": 0.4,
+      "cortisol": 0.6,
+      "oxytocin": 0.4
+    },
+    "tags": ["existential", "philosophy", "insomnia"]
+  },
+  {
+    "content": "Unexpected moment of joy from something small and simple",
+    "age_days": 30,
+    "intensity": 0.7,
+    "emotional_state": {
+      "dopamine": 0.8,
+      "serotonin": 0.8,
+      "cortisol": 0.2,
+      "oxytocin": 0.6
+    },
+    "tags": ["joy", "simple", "gratitude"]
+  }
+]

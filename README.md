@@ -1,238 +1,190 @@
-# HRM Jet Signal Trading System: Corporate Aviation Intelligence
+# Emotional AI System
 
-**Train a profitable AI model that analyzes corporate jet movements and generates trading signals before market-moving events**
+A research project exploring neurochemistry-based emotional modeling for AI systems using Tinker API's LoRA fine-tuning and real-time state management.
 
-## 🎯 What This System Does
+## Architecture
 
-- Tracks **corporate jet movements** using real-time ADS-B flight data
-- Maps tail numbers to **public companies** and executive travel patterns
-- Analyzes **multi-level flight hierarchies** to detect unusual activity
-- Generates **profitable trading signals** before M&A, earnings, and major announcements
-- Achieves **12-25% annual returns** with proprietary aviation intelligence
+- **Emotion Engine**: FastAPI service managing neurochemical state via ODE simulation
+- **Training Pipeline**: Tinker API integration for LoRA-based fine-tuning
+- **Base Model**: Llama-3.2-3B
+- **Real-time Updates**: WebSocket for state synchronization
+- **MCP Integration**: Kiro IDE integration for emotion state access
 
-## 🚀 Quick Start: Deploy Jet Intelligence System
-
-**📖 [Complete System Setup Guide](COMPLETE_TRAINING_GUIDE.md)**
-
-1. **Setup ADS-B Data Feed**: Real-time flight tracking (OpenSky, FlightAware APIs)
-2. **Build Company Database**: Map tail numbers to public companies
-3. **Train HRM Model**: Multi-level reasoning over flight patterns
-4. **Deploy Signal Generator**: Real-time trade signals from jet movements
-5. **Execute & Monitor**: Automated trading with risk management
-
-## 🏗️ How It Works
+## Project Structure
 
 ```
-Corporate Jet Data → Hierarchical Analysis → Trading Signals
-   (ADS-B Feed)         (HRM Reasoning)      (Buy/Sell/Hold)
-        ↓                      ↓                    ↓
-   Flight Patterns      Multi-Level Events    Conviction Scores
-   Company Mapping      (L0→L1→L2 Analysis)   (Risk-Adjusted)
+.
+├── specs/                     # Kiro spec files (requirements, design, tasks)
+├── emotion_engine/            # Neurochemistry service
+│   ├── server.py             # FastAPI + MCP server
+│   └── neurochemistry.py     # ODE-based state simulation
+├── training/                  # Training scripts
+│   ├── train.py              # Main Tinker training pipeline
+│   ├── data_prep.py          # Dataset preparation
+│   └── tinker_example.py     # Tinker API usage examples
+├── inference/                 # Inference service
+│   ├── service.py            # Basic inference
+│   └── tinker_inference.py   # Tinker-based inference with emotion
+├── tests/                     # Test suite
+├── config.py                  # Configuration management
+├── .env.example              # Environment variables template
+└── .kiro/settings/mcp.json   # MCP server configuration
 ```
 
-### Architecture Levels
-- **Level 0**: Single flight legs (NYC → Chicago)
-- **Level 1**: Multi-leg trips (NYC → Chicago → San Jose same day)  
-- **Level 2**: Company-wide travel graphs (all jets, all trips, weekly patterns)
+## Setup
 
-## 📊 Expected Performance
+### 1. Install Dependencies
 
-- **Signal Accuracy**: 75-90% for major corporate events
-- **Annual Returns**: 12-25% with aviation intelligence edge
-- **Sharpe Ratio**: >2.0 (superior risk-adjusted returns)
-- **Lead Time**: 2-48 hours before public announcements
-- **Coverage**: 500+ public companies with trackable jets
-
-## 📋 What You Need
-
-### Required Data Sources
-- **ADS-B Flight Data**: Real-time aircraft positions (OpenSky Network, FlightAware)
-- **Company-Jet Mapping**: FAA registration → Public company database
-- **Market Data**: Stock prices, earnings dates, M&A announcements
-- **Contextual Data**: Executive schedules, supplier locations, law firm addresses
-
-### System Requirements
-- **Real-time Data**: ADS-B API access (OpenSky free tier available)
-- **Computing**: Python 3.8+, 16GB+ RAM for graph processing
-- **Storage**: PostgreSQL/TimescaleDB for time-series flight data
-
-## 🎯 System Setup Process
-
-### Step 1: Data Infrastructure (1 hour)
-- Setup ADS-B data feed (OpenSky Network API)
-- Build aircraft-to-company mapping database
-- Configure real-time flight data collection
-
-### Step 2: Model Training (4-8 hours)
-- Collect historical flight patterns
-- Train HRM on multi-level flight hierarchies
-- Optimize for profit-based loss function
-
-### Step 3: Signal Generation (30 minutes)
-- Deploy real-time flight monitoring
-- Configure trading signal thresholds
-- Setup risk management parameters
-
-### Step 4: Live Trading (Ongoing)
-- Monitor corporate jet movements
-- Generate automated trading signals
-- Execute trades with position sizing
-
-## 📡 Flight Data Sources
-
-### Primary Data Feeds
-- **OpenSky Network**: https://opensky-network.org/ (Free ADS-B data)
-- **FlightAware API**: https://flightaware.com/commercial/firehose/
-- **FlightRadar24**: https://www.flightradar24.com/commercial/
-- **ADS-B Exchange**: https://www.adsbexchange.com/
-
-### Aircraft Registration Data
 ```bash
-# FAA Aircraft Registry (Updated monthly)
-wget https://registry.faa.gov/database/ReleasableAircraft.zip
-
-# ICAO Aircraft Database
-# Commercial aviation databases for tail number mapping
+pip install -r requirements.txt
 ```
 
-### Data Pipeline Structure
-```
-data/
-├── flight_data/
-│   ├── live/              # Real-time ADS-B feeds
-│   ├── historical/        # Historical flight tracks
-│   └── processed/         # Cleaned and enriched data
-├── company_mapping/
-│   ├── faa_registry.db    # Aircraft registration database
-│   ├── company_aircraft.db # Tail number to company mapping
-│   └── executive_patterns.db # Travel pattern analysis
-└── market_data/
-    ├── stock_prices/      # Real-time and historical prices
-    ├── earnings_dates/    # Corporate calendar events
-    └── news_events/       # Market-moving announcements
+### 2. Configure Tinker API
+
+Create a `.env` file with your Tinker API credentials:
+
+```bash
+cp .env.example .env
 ```
 
-## 🔧 HRM Architecture
+Edit `.env` and add your API key:
 
-### Hierarchical Flight Analysis
-- **Level 0 Module**: Individual flight leg analysis (route anomalies, timing)
-- **Level 1 Module**: Multi-leg trip reasoning (executive travel patterns)
-- **Level 2 Module**: Company-wide fleet coordination analysis
-- **Cross-Level Attention**: Integrates insights across all hierarchy levels
+```bash
+TINKER_API_KEY=your_tinker_api_key_here
+TINKER_API_URL=https://api.tinker.ai/v1
 
-### Advanced Features
-- **Adaptive Reasoning**: Dynamic halting mechanism for computational efficiency
-- **Sparse Processing**: 60-80% efficiency gain on routine flights
-- **Risk-Adjusted Signals**: Integrated position sizing and risk assessment
-- **Multi-Horizon Predictions**: 1-day to 1-month signal horizons
+MODEL_NAME=meta-llama/Llama-3.2-3B
+LORA_RANK=64
+LEARNING_RATE=0.001
 
-## 💡 Why Jet Intelligence Works
+EMOTION_ENGINE_URL=ws://localhost:8000/ws
+```
 
-### The Aviation-Market Edge
-- **Information Asymmetry**: Corporate jets move before public announcements
-- **Executive Intent**: Flight patterns reveal strategic decisions in progress
-- **Timing Advantage**: 2-48 hour lead time before market-moving news
-- **Unique Data Moat**: Most funds ignore aviation intelligence entirely
+### 3. Prepare Training Data
 
-### Proven Signal Categories
-- **M&A Activity**: Unusual flights to investment banks, law firms, target companies
-- **Earnings Preparation**: Executive travel patterns before quarterly releases
-- **Strategic Partnerships**: Cross-company flight coordination patterns
-- **Crisis Management**: Emergency travel patterns during corporate issues
-- **Board Meetings**: Predictable director travel before major announcements
+```bash
+python training/data_prep.py
+```
 
-## 🚀 After Training: Deploy Jet Signals
+This creates `training_data.jsonl` with emotional state annotations.
 
-### Real-time Flight Analysis
+### 4. Start Emotion Engine
+
+In one terminal:
+
+```bash
+python emotion_engine/server.py
+```
+
+The emotion engine will run on `http://localhost:8000` with:
+- REST API for MCP tools
+- WebSocket endpoint at `/ws`
+
+### 5. Run Training
+
+In another terminal:
+
+```bash
+python training/train.py
+```
+
+This will:
+1. Train base model with emotional conditioning
+2. Train separate LoRA adapters for each emotional state
+3. Save checkpoints to `checkpoints/`
+4. Save LoRA adapters to `loras/`
+
+### 6. Run Inference
+
+```bash
+python inference/tinker_inference.py
+```
+
+## Tinker API Usage
+
+The system uses Tinker's low-level training primitives:
+
 ```python
-# Monitor live corporate jet activity
-python jet_inference.py \
-  --model checkpoints/jet_hrm_model.pt \
-  --continuous \
-  --interval 5
+from tinker import TinkerClient
 
-# Output:
-# 🛩️ AAPL: 3 unusual flights detected
-# 📈 Signal: BUY (conviction: +0.82, confidence: 89%)
-# 🎯 Reasoning: Executive travel to supplier locations
+# Initialize with API key
+client = TinkerClient(
+    api_key="your_api_key",
+    model="meta-llama/Llama-3.2-3B",
+    lora_rank=64
+)
+
+# Training loop
+loss = client.forward_backward(input_ids=input_text, labels=target_text)
+client.backward(loss)
+client.optim_step()
+
+# Multiple LoRA adapters
+client.init_lora(name="high_dopamine")
+# ... train ...
+client.save_lora("high_dopamine", "loras/high_dopamine.pt")
+
+# Dynamic blending
+client.blend_loras(
+    lora_weights={"high_dopamine": 0.7, "balanced": 0.3},
+    lora_adapters={"high_dopamine": "loras/high_dopamine.pt", ...}
+)
+
+# Generation
+output = client.sample(prompt=text, max_tokens=200, temperature=0.9)
 ```
 
-### Automated Trading Integration
-```python
-# Generate signals from flight patterns
-signals = signal_generator.generate_signals(flight_events, market_data)
+## Kiro MCP Integration
 
-for signal in signals:
-    if signal.confidence > 0.75 and signal.risk_score < 0.3:
-        execute_trade(
-            symbol=signal.ticker,
-            side=signal.signal,
-            size=signal.position_size,
-            stop_loss=signal.stop_loss,
-            take_profit=signal.take_profit
-        )
+The emotion engine is configured as an MCP server in `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "emotion_engine": {
+      "command": "python",
+      "args": ["emotion_engine/server.py"],
+      "autoApprove": ["get_emotional_state", "update_emotion"]
+    }
+  }
+}
 ```
 
-## 🎯 Success Tips
+Available MCP tools:
+- `get_emotional_state` - Get current neurochemistry
+- `update_emotion` - Update emotional state based on interaction
 
-### Data Quality Matters
-- **Clear Audio**: Minimal background noise, clear Powell voice
-- **Precise Timing**: Exact FOMC meeting timestamps (2:00 PM EST)
-- **Sufficient Data**: 10+ meetings minimum, 20+ for optimal results
-- **Recent Data**: Include latest FOMC meetings for current patterns
+## Neurochemistry Model
 
-### Training Best Practices
-- **Monitor Progress**: Watch loss curves and accuracy metrics
-- **Early Stopping**: Model stops when profit metrics plateau
-- **Save Frequently**: Colab sessions can timeout
-- **Test Immediately**: Validate on new speeches after training
+Four neurochemical variables (0.0-1.0):
 
-### Deployment Considerations
-- **Risk Management**: Never risk more than you can afford to lose
-- **Position Sizing**: Start small, scale up with proven performance
-- **Market Conditions**: Model works best during normal market volatility
-- **Human Oversight**: Always review AI recommendations before trading
+- **Dopamine**: Reward/curiosity - affects exploration and creativity
+- **Serotonin**: Mood stability - affects emotional baseline
+- **Cortisol**: Stress/vigilance - affects caution and anxiety
+- **Oxytocin**: Social bonding - affects empathy and connection
 
-## 📁 Project Structure
+State updates via differential equations with decay rates and interaction signals.
 
-```
-jet-signal-hrm/
-├── COMPLETE_TRAINING_GUIDE.md   # 📖 Complete system setup guide
-├── jet_signal_hrm/              # 🤖 Core HRM system
-│   ├── models/hrm_jet.py       # Hierarchical reasoning model
-│   ├── data/flight_data.py     # ADS-B data collection
-│   ├── data/company_mapper.py  # Aircraft-to-company mapping
-│   └── trading/signal_generator.py # Trading signal generation
-├── train_jet_hrm.py            # 🏋️ Model training pipeline
-├── jet_inference.py            # 🔮 Real-time flight analysis
-├── collect_flight_data.py      # 📊 Historical data collection
-└── requirements.txt            # 📦 Dependencies
+## Testing
+
+```bash
+# Test neurochemistry engine
+python tests/test_neurochemistry.py
+
+# Test Tinker API integration
+python training/tinker_example.py
 ```
 
-## ⚠️ Important Disclaimers
+## Development Workflow
 
-### Trading Risks
-- **Past Performance ≠ Future Results**: Historical correlations may not continue
-- **Market Volatility**: Unexpected events can override speech-based signals  
-- **Position Sizing**: Never risk more than 1-2% of portfolio per trade
-- **Human Oversight**: Always review AI recommendations before executing
+1. **Spec-driven**: Update specs in `specs/` directory
+2. **Train**: Modify training pipeline in `training/train.py`
+3. **Test**: Run emotion engine and inference service
+4. **Iterate**: Adjust neurochemistry parameters and LoRA blending weights
 
-### Educational Purpose
-This model is designed for:
-- ✅ Learning AI/ML techniques
-- ✅ Understanding Fed communication patterns
-- ✅ Exploring speech-to-market correlations
-- ❌ Guaranteed profitable trading
-- ❌ Financial advice or recommendations
+## Notes
 
-### Legal Compliance
-- Check local regulations for algorithmic trading
-- Ensure compliance with broker terms of service
-- Consider tax implications of frequent trading
-- Consult financial advisors for investment decisions
-
-## 🎉 Ready to Start?
-
-**📖 [Open the Complete Training Guide](COMPLETE_TRAINING_GUIDE.md)**
-
-Transform Jerome Powell's speeches into profitable trading signals with AI! 🚀📈💰
+- The system uses conditioning tokens like `<DA=0.75><SE=0.60>` to influence model behavior
+- LoRA adapters are dynamically blended based on real-time neurochemical state
+- Temperature is adjusted based on dopamine levels (higher = more creative)
+- Curiosity rewards are applied during training for high dopamine states

@@ -1,3 +1,6 @@
+# Environment variables
+.env
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,14 +22,11 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual environments
 venv/
-env/
 ENV/
-.venv/
-.env/
+env/
 
 # IDE
 .vscode/
@@ -35,59 +35,32 @@ ENV/
 *.swo
 *~
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Model files and data
+# Model files and checkpoints
+checkpoints/
+loras/
 *.pt
 *.pth
-*.pkl
-*.h5
-checkpoints/
-/data/
-*.db
-*.sqlite
-*.sqlite3
+*.bin
+*.safetensors
+
+# Training data (keep example, ignore generated)
+training_data.jsonl
 
 # Logs
 *.log
-logs/
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Temporary files
-*.tmp
-*.temp
-temp/
-tmp/
+# Kiro
+.kiro/cache/
+.kiro/logs/
 
-# API keys and secrets
-.env
-*.key
-secrets/
-config/secrets.json
+# Jupyter
+.ipynb_checkpoints/
 
-# Large files
-*.zip
-*.tar.gz
-*.rar
-
-# Old Jerome Powell files (keeping for reference but not main focus)
-jerome_powell_hrm/
-Jerome_Powell_HRM_Training.ipynb
-collect_powell_data.py
-hrm_trading.py
-train_hrm.py
-inference.py
-prepare_data.py
-
-# Kiro IDE files
-.kiro/
-.grok/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
