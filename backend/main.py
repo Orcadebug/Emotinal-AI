@@ -65,6 +65,64 @@ if tinker_api_key:
 else:
     print("Warning: TINKER_API_KEY not set.")
 
+# --- Gatekeeper Logic ---
+def get_biological_state(conn):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT * FROM biological_state LIMIT 1")
+        return cur.fetchone()
+
+def update_biological_state(conn, adenosine_change=0.05):
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE biological_state 
+            SET adenosine = LEAST(adenosine + %s, 1.0),
+                last_updated = CURRENT_TIMESTAMP
+            RETURNING adenosine
+        """, (adenosine_change,))
+        conn.commit()
+        return cur.fetchone()[0]
+
+def update_relationship(conn, user_id, affinity_change=0.0):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("""
+            INSERT INTO relationships (user_id, affinity, interaction_count, last_interaction)
+            VALUES (%s, %s, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE 
+            SET affinity = relationships.affinity + %s,
+                interaction_count = relationships.interaction_count + 1,
+                last_interaction = CURRENT_TIMESTAMP
+            RETURNING affinity, name, secret_phrase
+        """, (user_id, affinity_change, affinity_change))
+        conn.commit()
+        return cur.fetchone()
+
+def handle_auth_commands(conn, user_id, message):
+    """Parse message for auth commands and update DB."""
+    import re
+    response_override = None
+    
+    # 1. Set Name: "My name is [Name]"
+    name_match = re.search(r"my name is\s+([a-zA-Z]+)", message, re.IGNORECASE)
+    if name_match:
+        new_name = name_match.group(1)
+        with conn.cursor() as cur:
+            cur.execute("UPDATE relationships SET name = %s WHERE user_id = %s", (new_name, user_id))
+            conn.commit()
+        # We don't override response, we let the AI acknowledge it naturally, 
+        # but we might inject a system note if we were using system prompts.
+        # For now, the AI will just see "User (Name): My name is Name" next time.
+        
+    # 2. Set Secret: "Set secret [Secret]"
+    secret_match = re.search(r"set secret\s+(.+)", message, re.IGNORECASE)
+    if secret_match:
+        new_secret = secret_match.group(1).strip()
+        with conn.cursor() as cur:
+            cur.execute("UPDATE relationships SET secret_phrase = %s WHERE user_id = %s", (new_secret, user_id))
+            conn.commit()
+        response_override = "Secret set. I'll remember that."
+
+    return response_override
+
 # --- Routes ---
 @app.get("/")
 def read_root():
@@ -86,35 +144,50 @@ def chat(request: ChatRequest):
         if bio_state["sleep_mode"] or bio_state["adenosine"] > 0.9:
             return ChatResponse(response="Zzz... (The organism is sleeping)", mood="asleep")
 
-        # 2. Check/Update Relationship
-        affinity = update_relationship(conn, request.user_id, affinity_change=0.1)
+        # 2. Check/Update Relationship & Auth
+        rel = update_relationship(conn, request.user_id, affinity_change=0.1)
+        affinity = rel['affinity']
+        user_name = rel['name']
         
         if affinity < -5.0:
             return ChatResponse(response="I don't want to talk to you.", mood="hostile")
 
-        # 3. Generate Response via Tinker
+        # 3. Handle Auth Commands
+        auth_response = handle_auth_commands(conn, request.user_id, request.message)
+        if auth_response:
+            return ChatResponse(response=auth_response, mood="neutral")
+
+        # 4. Generate Response via Tinker
         response_text = ""
         if sampling_client and tokenizer:
             try:
-                # Construct Prompt
-                # TODO: Inject internal state based on bio_state/affinity if needed
-                # For now, just pass the user message as raw text (DailyDialog style)
-                prompt_text = request.message
+                # Construct Prompt with Identity
+                # If name is known, use it. Else "Stranger".
+                identity_label = f"User ({user_name})" if user_name else "User (Stranger)"
+                
+                # We format it somewhat like a script to give the AI context
+                # "User (Name): Message"
+                prompt_text = f"{identity_label}: {request.message}\nCaz:"
                 
                 # Tokenize
                 tokens = tokenizer.encode(prompt_text)
                 model_input = tinker.types.ModelInput.from_ints(tokens)
                 
                 # Sample
-                sampling_params = tinker.types.SamplingParams(max_tokens=150, temperature=0.8)
+                sampling_params = tinker.types.SamplingParams(max_tokens=150, temperature=0.8, stop_token_ids=[tokenizer.encode("\n")[0]]) 
+                # Note: Stop at newline to prevent generating user's next turn if it tries to hallucinate it.
+                # But we need to check what the newline token is. Usually 13 or similar.
+                # Let's just try without explicit stop tokens first, or use a simple one.
+                
                 future = sampling_client.sample(prompt=model_input, num_samples=1, sampling_params=sampling_params)
                 result = future.result()
                 
                 # Decode
                 if result.sequences:
-                    # result.sequences[0] is a SampledSequence, which has .tokens
                     generated_tokens = result.sequences[0].tokens
                     response_text = tokenizer.decode(generated_tokens)
+                    # Strip "Caz:" if it generated it (unlikely with our prompt structure but possible)
+                    response_text = response_text.replace("Caz:", "").strip()
                 else:
                     response_text = "..."
             except Exception as e:
@@ -124,10 +197,10 @@ def chat(request: ChatRequest):
             # Fallback if Tinker not connected
             response_text = "[Tinker not connected. Check logs.]"
 
-        # 4. Update State
+        # 5. Update State
         new_adenosine = update_biological_state(conn)
         
-        # 5. Log Chat
+        # 6. Log Chat
         # Convert RealDictRow to dict and handle datetime
         bio_state_dict = dict(bio_state)
         if 'last_updated' in bio_state_dict:

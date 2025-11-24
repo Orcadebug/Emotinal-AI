@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS biological_state (
 );
 
 CREATE TABLE IF NOT EXISTS relationships (
-    user_id VARCHAR(255) PRIMARY KEY,
+    user_id TEXT PRIMARY KEY,
+    name TEXT,
+    secret_phrase TEXT,
     affinity FLOAT DEFAULT 0.0,
     interaction_count INT DEFAULT 0,
     last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP
