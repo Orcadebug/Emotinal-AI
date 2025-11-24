@@ -23,6 +23,15 @@ service_client = None
 sampling_client = None
 tokenizer = None
 
+# --- Models ---
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str
+
+class ChatResponse(BaseModel):
+    response: str
+    mood: str
+
 if tinker_api_key:
     try:
         print("Initializing Tinker Clients...")
@@ -35,11 +44,12 @@ if tinker_api_key:
         
         # 2. Find latest generic-human-v2 checkpoint
         rest_client = service_client.create_rest_client()
-        checkpoints = rest_client.list_user_checkpoints().result()
+        checkpoints_response = rest_client.list_user_checkpoints().result()
         
         # Filter for our model
         target_cp = None
-        for cp in checkpoints:
+        # checkpoints_response.checkpoints is the list
+        for cp in checkpoints_response.checkpoints:
             if "generic-human-v2" in cp.checkpoint_id and cp.checkpoint_type == "sampler":
                 target_cp = cp
                 break # Assuming list is sorted by time desc, or we just take first match
