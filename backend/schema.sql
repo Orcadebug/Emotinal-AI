@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS biological_state (
     id SERIAL PRIMARY KEY,
     adenosine FLOAT DEFAULT 0.0,
     circadian_rhythm FLOAT DEFAULT 0.0,
+    sleep_mode BOOLEAN DEFAULT FALSE,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -18,5 +19,6 @@ CREATE TABLE IF NOT EXISTS chat_logs (
     message TEXT,
     response TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    emotional_valence FLOAT DEFAULT 0.0
+    emotional_valence FLOAT DEFAULT 0.0,
+    biological_state_snapshot TEXT
 );

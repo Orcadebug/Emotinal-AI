@@ -6,6 +6,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import List, Optional
 import random
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -47,6 +50,20 @@ def update_biological_state(conn, adenosine_change=0.05):
         conn.commit()
         return cur.fetchone()[0]
 
+def update_relationship(conn, user_id, affinity_change=0.0):
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO relationships (user_id, affinity, interaction_count, last_interaction)
+            VALUES (%s, %s, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE 
+            SET affinity = relationships.affinity + %s,
+                interaction_count = relationships.interaction_count + 1,
+                last_interaction = CURRENT_TIMESTAMP
+            RETURNING affinity
+        """, (user_id, affinity_change, affinity_change))
+        conn.commit()
+        return cur.fetchone()[0]
+
 # --- Routes ---
 @app.get("/")
 def read_root():
@@ -68,7 +85,14 @@ def chat(request: ChatRequest):
         if bio_state["sleep_mode"] or bio_state["adenosine"] > 0.9:
             return ChatResponse(response="Zzz... (The organism is sleeping)", mood="asleep")
 
-        # 2. Construct Prompt (Placeholder for now)
+        # 2. Check/Update Relationship
+        # Default: +0.1 affinity per interaction
+        affinity = update_relationship(conn, request.user_id, affinity_change=0.1)
+        
+        if affinity < -5.0:
+            return ChatResponse(response="I don't want to talk to you.", mood="hostile")
+
+        # 3. Construct Prompt (Placeholder for now)
         # In Phase 4, we will inject relationship state and internal monologue here.
         prompt = request.message
 
@@ -89,11 +113,16 @@ def chat(request: ChatRequest):
         new_adenosine = update_biological_state(conn)
         
         # 5. Log Chat
+        # Convert RealDictRow to dict and handle datetime
+        bio_state_dict = dict(bio_state)
+        if 'last_updated' in bio_state_dict:
+            bio_state_dict['last_updated'] = str(bio_state_dict['last_updated'])
+
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO chat_logs (user_id, message, response, biological_state_snapshot)
                 VALUES (%s, %s, %s, %s)
-            """, (request.user_id, request.message, response_text, json.dumps(bio_state)))
+            """, (request.user_id, request.message, response_text, json.dumps(bio_state_dict)))
             conn.commit()
 
         return ChatResponse(response=response_text, mood="awake")
