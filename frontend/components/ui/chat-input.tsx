@@ -55,7 +55,7 @@ interface RippleEffectsProps {
 
 interface MenuButtonProps {
   toggleMenu: () => void;
-  menuRef: React.RefObject<HTMLDivElement>;
+  menuRef: React.RefObject<HTMLDivElement | null>;
   isMenuOpen: boolean;
   onSelectOption: (option: MenuOption) => void;
   textColor: string;
@@ -110,7 +110,7 @@ function useChatInputContext() {
 
 // ===== COMPONENTS =====
 
-const SendButton = memo(({ 
+const SendButton = memo(({
   isDisabled,
   textColor
 }: SendButtonProps) => {
@@ -119,11 +119,10 @@ const SendButton = memo(({
       type="submit"
       aria-label="Send message"
       disabled={isDisabled}
-      className={`ml-auto self-center h-8 w-8 flex items-center justify-center rounded-full border-0 p-0 transition-all z-20 ${
-        isDisabled
+      className={`ml-auto self-center h-8 w-8 flex items-center justify-center rounded-full border-0 p-0 transition-all z-20 ${isDisabled
           ? 'opacity-40 cursor-not-allowed bg-gray-400 text-white/60'
           : 'opacity-90 bg-[#0A1217] text-white hover:opacity-100 cursor-pointer hover:shadow-lg'
-      }`}
+        }`}
     >
       <svg
         width="32"
@@ -147,11 +146,11 @@ const SendButton = memo(({
 
 SendButton.displayName = "SendButton";
 
-const OptionsMenu = memo(({ 
-  isOpen, 
+const OptionsMenu = memo(({
+  isOpen,
   onSelect,
   textColor,
-  menuOptions 
+  menuOptions
 }: OptionsMenuProps) => {
   if (!isOpen) return null;
 
@@ -175,10 +174,10 @@ const OptionsMenu = memo(({
 
 OptionsMenu.displayName = "OptionsMenu";
 
-const OptionTag = memo(({ 
-  option, 
+const OptionTag = memo(({
+  option,
   onRemove,
-  textColor 
+  textColor
 }: OptionTagProps) => (
   <div
     className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-md text-xs text-white"
@@ -211,18 +210,18 @@ const OptionTag = memo(({
 
 OptionTag.displayName = "OptionTag";
 
-const GlowEffects = memo(({ 
-  glowIntensity, 
+const GlowEffects = memo(({
+  glowIntensity,
   mousePosition,
   animationDuration,
   enabled
 }: GlowEffectsProps) => {
   if (!enabled) return null;
-  
+
   return (
     <>
       <div className="absolute inset-0 bg-gradient-to-r from-white/8 via-white/12 to-white/8 backdrop-blur-2xl rounded-3xl"></div>
-      
+
       <div
         className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none"
         style={{
@@ -235,7 +234,7 @@ const GlowEffects = memo(({
           filter: 'blur(0.5px)',
         }}
       ></div>
-      
+
       <div
         className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
         style={{
@@ -247,7 +246,7 @@ const GlowEffects = memo(({
           filter: 'blur(1px)',
         }}
       ></div>
-      
+
       <div
         className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 pointer-events-none blur-sm"
         style={{
@@ -262,7 +261,7 @@ GlowEffects.displayName = "GlowEffects";
 
 const RippleEffects = memo(({ ripples, enabled }: RippleEffectsProps) => {
   if (!enabled || ripples.length === 0) return null;
-  
+
   return (
     <>
       {ripples.map((ripple) => (
@@ -285,7 +284,7 @@ const RippleEffects = memo(({ ripples, enabled }: RippleEffectsProps) => {
 
 RippleEffects.displayName = "RippleEffects";
 
-const InputArea = memo(({ 
+const InputArea = memo(({
   value,
   setValue,
   placeholder,
@@ -295,7 +294,7 @@ const InputArea = memo(({
   textColor
 }: InputAreaProps) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -306,7 +305,7 @@ const InputArea = memo(({
         Math.min(scrollHeight, maxHeight) + "px";
     }
   }, [value]);
-  
+
   return (
     <div className="flex-1 relative h-full flex items-center">
       <textarea
@@ -332,7 +331,7 @@ const InputArea = memo(({
 
 InputArea.displayName = "InputArea";
 
-const MenuButton = memo(({ 
+const MenuButton = memo(({
   toggleMenu,
   menuRef,
   isMenuOpen,
@@ -349,9 +348,9 @@ const MenuButton = memo(({
     >
       <Plus size={16} />
     </button>
-    <OptionsMenu 
-      isOpen={isMenuOpen} 
-      onSelect={onSelectOption} 
+    <OptionsMenu
+      isOpen={isMenuOpen}
+      onSelect={onSelectOption}
       textColor={textColor}
       menuOptions={menuOptions}
     />
@@ -360,20 +359,20 @@ const MenuButton = memo(({
 
 MenuButton.displayName = "MenuButton";
 
-const SelectedOptions = memo(({ 
+const SelectedOptions = memo(({
   options,
   onRemove,
   textColor
 }: SelectedOptionsProps) => {
   if (options.length === 0) return null;
-  
+
   return (
     <div className="flex flex-wrap gap-2 mt-2 pl-3 pr-3 z-20 relative">
       {options.map((option) => (
-        <OptionTag 
-          key={option} 
-          option={option} 
-          onRemove={onRemove} 
+        <OptionTag
+          key={option}
+          option={option}
+          onRemove={onRemove}
           textColor={textColor}
         />
       ))}
@@ -441,7 +440,7 @@ export default function ChatInput({
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!showEffects) return;
-    
+
     if (containerRef.current && !throttleRef.current) {
       throttleRef.current = window.setTimeout(() => {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -457,16 +456,16 @@ export default function ChatInput({
 
   const addRipple = useCallback((x: number, y: number) => {
     if (!showEffects) return;
-    
+
     if (ripples.length < 5) {
       const newRipple: RippleEffect = {
         x,
         y,
         id: Date.now(),
       };
-      
+
       setRipples(prev => [...prev, newRipple]);
-      
+
       setTimeout(() => {
         setRipples(prev => prev.filter(ripple => ripple.id !== newRipple.id));
       }, 600);
@@ -478,7 +477,7 @@ export default function ChatInput({
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      
+
       addRipple(x, y);
     }
   }, [addRipple]);
@@ -541,15 +540,15 @@ export default function ChatInput({
             transition: `all ${animationDuration}ms ease, box-shadow ${animationDuration}ms ease`,
           }}
         >
-          <GlowEffects 
-            glowIntensity={glowIntensity} 
-            mousePosition={mousePosition} 
+          <GlowEffects
+            glowIntensity={glowIntensity}
+            mousePosition={mousePosition}
             animationDuration={animationDuration}
             enabled={showEffects}
           />
-          
+
           <RippleEffects ripples={ripples} enabled={showEffects} />
-          
+
           <div className="flex items-center relative z-20">
             {menuOptions.length > 0 && (
               <MenuButton
@@ -561,7 +560,7 @@ export default function ChatInput({
                 menuOptions={menuOptions}
               />
             )}
-            
+
             <InputArea
               value={value}
               setValue={setValue}
@@ -572,9 +571,9 @@ export default function ChatInput({
               textColor={textColor}
             />
           </div>
-          
-          <SelectedOptions 
-            options={selectedOptions} 
+
+          <SelectedOptions
+            options={selectedOptions}
             onRemove={removeOption}
             textColor={textColor}
           />
