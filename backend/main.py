@@ -12,7 +12,7 @@ import json # Added this import
 
 load_dotenv()
 
-from backend.voice_router import router as voice_router # Added this import
+from voice_router import router as voice_router
 
 app = FastAPI()
 
