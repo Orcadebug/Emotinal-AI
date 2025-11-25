@@ -1,162 +1,219 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import ChatInput from "@/components/ui/chat-input";
+import { useState, useEffect, useRef, useCallback } from "react";
+import Orb from "@/components/orb";
 import { v4 as uuidv4 } from "uuid";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
-
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [userId, setUserId] = useState<string>("");
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isActive, setIsActive] = useState(false);
+  const [isTalking, setIsTalking] = useState(false); // AI is talking
+  const [volume, setVolume] = useState(0); // For visualization
+  const [status, setStatus] = useState("Click to Start");
 
-  // Initialize user ID
-  useEffect(() => {
-    let storedUserId = localStorage.getItem("organism_user_id");
-    if (!storedUserId) {
-      storedUserId = uuidv4();
-      localStorage.setItem("organism_user_id", storedUserId);
-    }
-    setUserId(storedUserId);
-  }, []);
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const recognitionRef = useRef<any>(null); // SpeechRecognition
+  const audioQueueRef = useRef<string[]>([]); // Queue for audio chunks
+  const isPlayingRef = useRef(false);
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleSubmit = async (value: string) => {
-    if (!value.trim() || !userId) return;
-
-    // Add user message
-    const userMessage: Message = {
-      id: uuidv4(),
-      role: "user",
-      content: value,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
+  // Initialize Audio Context & WebSocket
+  const startSession = async () => {
     try {
-      const response = await fetch(
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/chat",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            message: value,
-          }),
-        }
-      );
+      // 1. Audio Context
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // 2. WebSocket
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/chat";
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setStatus("Listening...");
+        setIsActive(true);
+      };
+
+      ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "text") {
+          setStatus(data.content); // Show text subtitle
+        } else if (data.type === "audio") {
+          // Queue audio
+          audioQueueRef.current.push(data.data);
+          playNextAudioChunk();
+        }
+      };
+
+      ws.onclose = () => {
+        setStatus("Disconnected");
+        setIsActive(false);
+      };
+
+      wsRef.current = ws;
+
+      // 3. Speech Recognition
+      if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        recognition.onstart = () => {
+          console.log("Recognition started");
+        };
+
+        recognition.onresult = (event: any) => {
+          let interimTranscript = "";
+          let finalTranscript = "";
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+
+          // Interruption Logic: If user speaks, stop AI
+          if (interimTranscript.length > 0 || finalTranscript.length > 0) {
+            if (isTalking) {
+              stopAiPlayback();
+            }
+            // Visualize user volume (mocked for now based on text length)
+            setVolume(Math.min((interimTranscript.length + finalTranscript.length) * 0.05, 1));
+          }
+
+          if (finalTranscript) {
+            console.log("Final:", finalTranscript);
+            // Send to backend
+            ws.send(JSON.stringify({ type: "text", content: finalTranscript }));
+            setVolume(0);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error("Speech error:", event.error);
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      } else {
+        setStatus("Speech Recognition not supported");
       }
 
-      const data = await response.json();
-
-      // Add assistant message
-      const assistantMessage: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: data.response,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Error sending message:", error);
-
-      // Add error message
-      const errorMessage: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: "Sorry, I couldn't connect. Check if the backend is running.",
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+    } catch (e) {
+      console.error("Setup error:", e);
+      setStatus("Error connecting");
     }
   };
 
+  const stopAiPlayback = () => {
+    // Clear queue
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    setIsTalking(false);
+
+    // Send interrupt signal
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "interrupt" }));
+    }
+  };
+
+  const playNextAudioChunk = async () => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0 || !audioContextRef.current) return;
+
+    isPlayingRef.current = true;
+    setIsTalking(true);
+
+    const chunkBase64 = audioQueueRef.current.shift();
+    if (!chunkBase64) return;
+
+    try {
+      // Decode Base64
+      const binaryString = window.atob(chunkBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Decode Audio
+      const audioBuffer = await audioContextRef.current.decodeAudioData(bytes.buffer);
+
+      // Play
+      const source = audioContextRef.current.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContextRef.current.destination);
+
+      // Visualization
+      const analyser = audioContextRef.current.createAnalyser();
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      visualizeAudio();
+
+      source.onended = () => {
+        isPlayingRef.current = false;
+        if (audioQueueRef.current.length > 0) {
+          playNextAudioChunk();
+        } else {
+          setIsTalking(false);
+          setVolume(0);
+        }
+      };
+
+      source.start(0);
+    } catch (e) {
+      console.error("Audio playback error:", e);
+      isPlayingRef.current = false;
+      setIsTalking(false);
+    }
+  };
+
+  const visualizeAudio = () => {
+    if (!analyserRef.current || !isPlayingRef.current) return;
+
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+
+    // Calculate average volume
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    const average = sum / dataArray.length;
+    setVolume(average / 128); // Normalize 0-2ish
+
+    requestAnimationFrame(visualizeAudio);
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between bg-black text-white">
-      {/* Chat Messages Area */}
-      <div className="flex-1 w-full max-w-4xl mx-auto px-4 py-8 overflow-y-auto">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-              Digital Organism
-            </h1>
-            <p className="text-gray-400 mb-2">
-              A living AI with memory, emotions, and dreams.
-            </p>
-            <p className="text-gray-500 text-sm">
-              Say &quot;My name is [Name]&quot; to introduce yourself.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-              >
-                <div
-                  className={`max-w-[70%] rounded-2xl px-4 py-3 ${message.role === "user"
-                      ? "bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30"
-                      : "bg-white/5 border border-white/10"
-                    }`}
-                >
-                  <p className="text-sm leading-relaxed">{message.content}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {message.timestamp.toLocaleTimeString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="max-w-[70%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10">
-                  <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+    <main className="flex min-h-screen flex-col items-center justify-center bg-black text-white overflow-hidden relative">
+
+      {/* Orb Container */}
+      <div className="w-full h-full absolute inset-0 flex items-center justify-center">
+        <Orb isActive={isActive} isTalking={isTalking} volume={volume} />
       </div>
 
-      {/* Chat Input */}
-      <div className="w-full pb-4">
-        <ChatInput
-          placeholder="Talk to the organism..."
-          onSubmit={handleSubmit}
-          disabled={isLoading}
-          glowIntensity={0.6}
-          expandOnFocus={true}
-          showEffects={true}
-        />
+      {/* Status Text */}
+      <div className="z-10 text-center pointer-events-none">
+        <h1 className="text-2xl font-light tracking-widest opacity-50 mb-4 uppercase">
+          {isActive ? "Connected" : "Digital Organism"}
+        </h1>
+        <p className="text-lg font-mono text-purple-300 animate-pulse">
+          {status}
+        </p>
       </div>
+
+      {/* Start Button Overlay */}
+      {!isActive && (
+        <button
+          onClick={startSession}
+          className="absolute z-20 px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full backdrop-blur-md transition-all text-sm tracking-wider uppercase"
+        >
+          Initialize Voice Link
+        </button>
+      )}
+
     </main>
   );
 }

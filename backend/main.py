@@ -7,10 +7,25 @@ from psycopg2.extras import RealDictCursor
 from typing import List, Optional
 import random
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware # Added this import
+import json # Added this import
 
 load_dotenv()
 
+from backend.voice_router import router as voice_router # Added this import
+
 app = FastAPI()
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(voice_router) # Added this line
 
 # --- Database Connection ---
 def get_db_connection():
