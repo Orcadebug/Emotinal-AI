@@ -75,7 +75,14 @@ class Brain:
                 self.service_client = tinker.ServiceClient(api_key=self.tinker_api_key)
                 
                 # 1. Get Tokenizer
-                training_client = self.service_client.create_lora_training_client(base_model="meta-llama/Llama-3.1-8B")
+                # Check for HF_TOKEN
+                if not os.environ.get("HF_TOKEN"):
+                    logger.warning("HF_TOKEN not set. Gated models (like Llama 3) may fail to load tokenizer.")
+                
+                base_model = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.1-8B")
+                logger.info(f"Loading tokenizer for base model: {base_model}")
+                
+                training_client = self.service_client.create_lora_training_client(base_model=base_model)
                 self.tokenizer = training_client.get_tokenizer()
                 
                 # 2. Find latest generic-human-v2 checkpoint
