@@ -44,6 +44,17 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
+    # Check API Key from query param: /ws/chat?key=YOUR_KEY
+    import os
+    BRAIN_API_KEY = os.environ.get("BRAIN_API_KEY")
+    
+    if BRAIN_API_KEY:
+        query_params = websocket.query_params
+        key = query_params.get("key")
+        if key != BRAIN_API_KEY:
+            await websocket.close(code=1008) # Policy Violation
+            return
+
     await manager.connect(websocket)
     brain = websocket.app.state.brain
     
