@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Orb from "@/components/orb";
 import { v4 as uuidv4 } from "uuid";
+import { BrainClient } from "@/utils/brain_client";
 
 export default function Home() {
   const [isActive, setIsActive] = useState(false);
@@ -10,7 +11,7 @@ export default function Home() {
   const [volume, setVolume] = useState(0); // For visualization
   const [status, setStatus] = useState("Click to Start");
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const brainRef = useRef<BrainClient | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recognitionRef = useRef<any>(null); // SpeechRecognition
@@ -23,32 +24,31 @@ export default function Home() {
       // 1. Audio Context
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
 
-      // 2. WebSocket
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/chat";
-      const ws = new WebSocket(wsUrl);
+      // 2. Brain Client
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const brain = new BrainClient(apiUrl);
 
-      ws.onopen = () => {
-        setStatus("Listening...");
-        setIsActive(true);
-      };
-
-      ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "text") {
-          setStatus(data.content); // Show text subtitle
-        } else if (data.type === "audio") {
-          // Queue audio
-          audioQueueRef.current.push(data.data);
-          playNextAudioChunk();
+      brain.connectWebSocket(
+        (data) => { // onMessage
+          if (data.type === "text") {
+            setStatus(data.content); // Show text subtitle
+          } else if (data.type === "audio") {
+            // Queue audio
+            audioQueueRef.current.push(data.data);
+            playNextAudioChunk();
+          }
+        },
+        () => { // onOpen
+          setStatus("Listening...");
+          setIsActive(true);
+        },
+        () => { // onClose
+          setStatus("Disconnected");
+          setIsActive(false);
         }
-      };
+      );
 
-      ws.onclose = () => {
-        setStatus("Disconnected");
-        setIsActive(false);
-      };
-
-      wsRef.current = ws;
+      brainRef.current = brain;
 
       // 3. Speech Recognition
       if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
@@ -85,8 +85,8 @@ export default function Home() {
 
           if (finalTranscript) {
             console.log("Final:", finalTranscript);
-            // Send to backend
-            ws.send(JSON.stringify({ type: "text", content: finalTranscript }));
+            // Send to backend via BrainClient
+            brain.sendWsText(finalTranscript);
             setVolume(0);
           }
         };
@@ -114,9 +114,7 @@ export default function Home() {
     setIsTalking(false);
 
     // Send interrupt signal
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "interrupt" }));
-    }
+    brainRef.current?.interrupt();
   };
 
   const playNextAudioChunk = async () => {
