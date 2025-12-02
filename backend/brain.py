@@ -21,6 +21,7 @@ class Brain:
         self.service_client = None
         self.sampling_client = None
         self.tokenizer = None
+        self.init_error = None
         
         self._initialize_tinker()
         self._initialize_db()
@@ -92,11 +93,14 @@ class Brain:
                     self.sampling_client = self.service_client.create_sampling_client(model_path=target_cp.tinker_path)
                 else:
                     logger.warning("No 'generic-human-v2' checkpoint found. Chat will fail.")
+                    self.init_error = "No 'generic-human-v2' checkpoint found."
                     
             except Exception as e:
                 logger.error(f"Error initializing Tinker: {e}")
+                self.init_error = str(e)
         else:
             logger.warning("TINKER_API_KEY not set.")
+            self.init_error = "TINKER_API_KEY not set."
 
     def get_db_connection(self):
         return psycopg2.connect(self.db_url)
@@ -236,4 +240,8 @@ class Brain:
         return self.process_message(user_id, message)
 
     def status(self):
-        return {"status": "alive", "tinker_connected": self.sampling_client is not None}
+        return {
+            "status": "alive", 
+            "tinker_connected": self.sampling_client is not None,
+            "init_error": self.init_error
+        }
