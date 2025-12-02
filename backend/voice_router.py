@@ -45,6 +45,12 @@ manager = ConnectionManager()
 @router.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    brain = websocket.app.state.brain
+    
+    # Generate a temporary user ID for WebSocket connections if not provided
+    # In a real app, we'd expect a handshake or token.
+    user_id = "voice_user_1" 
+    
     try:
         while True:
             data = await websocket.receive_text()
@@ -64,10 +70,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 user_text = message["content"]
                 logger.info(f"Received text: {user_text}")
                 
-                # 1. Generate AI Response (Text)
-                # For now, mock response or call Tinker if available
-                ai_text = f"I heard you say: {user_text}"
-                await manager.send_text(json.dumps({"type": "text", "content": ai_text}), websocket)
+                # 1. Generate AI Response (Text) via Brain
+                result = await brain.process_message_async(user_id, user_text)
+                ai_text = result["response"]
+                
+                await manager.send_text(json.dumps({"type": "text", "content": ai_text, "mood": result["mood"]}), websocket)
 
                 # 2. Generate Audio (TTS)
                 try:
