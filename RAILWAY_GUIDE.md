@@ -22,7 +22,7 @@ Since you are using Railway, your deployment is automated via GitHub.
     -   `HF_TOKEN`: Your Hugging Face User Access Token (Required for Llama 3).
     -   `BRAIN_API_KEY`: (Optional) Set this to a secret string (e.g., `my-secret-key-123`) to secure your API.
     -   `PORT`: Railway usually sets this automatically.
-
+    
 ### 3. Verify Deployment
 1.  Go to **Deployments** tab in your Backend service.
 2.  You should see a new deployment building.

@@ -55,6 +55,16 @@ class Brain:
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+
+                # Ensure sessions exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        session_id TEXT PRIMARY KEY,
+                        user_id TEXT REFERENCES relationships(user_id),
+                        last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
                 
                 # Initialize bio state if empty
                 cur.execute("SELECT COUNT(*) FROM biological_state")
@@ -195,16 +205,84 @@ class Brain:
             logger.error(f"Tinker generation failed: {e}")
             return "[Brain Error]"
 
-    def process_message(self, user_id: str, message: str):
+    def get_or_create_session(self, conn, session_id):
+        """Get session, checking for timeout (4 hours)."""
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM sessions WHERE session_id = %s", (session_id,))
+            session = cur.fetchone()
+            
+            if session:
+                # Check timeout (4 hours)
+                # Note: Postgres timestamp subtraction returns timedelta
+                cur.execute("SELECT (NOW() - %s > INTERVAL '4 hours') as is_expired", (session['last_active'],))
+                is_expired = cur.fetchone()['is_expired']
+                
+                if is_expired:
+                    logger.info(f"Session {session_id} expired. Resetting identity.")
+                    cur.execute("UPDATE sessions SET user_id = NULL, last_active = NOW() WHERE session_id = %s", (session_id,))
+                    conn.commit()
+                    session['user_id'] = None
+                else:
+                    # Update activity
+                    cur.execute("UPDATE sessions SET last_active = NOW() WHERE session_id = %s", (session_id,))
+                    conn.commit()
+            else:
+                # Create new session
+                cur.execute("INSERT INTO sessions (session_id) VALUES (%s) RETURNING *", (session_id,))
+                conn.commit()
+                session = cur.fetchone()
+                
+            return session
+
+    def link_session_to_user(self, conn, session_id, user_name):
+        """Link a session to a user (creating user if needed)."""
+        # Normalize user_id from name (simple lowercase for now)
+        user_id = user_name.lower().strip()
+        
+        with conn.cursor() as cur:
+            # Ensure user exists in relationships
+            cur.execute("""
+                INSERT INTO relationships (user_id, name, affinity, interaction_count, last_interaction)
+                VALUES (%s, %s, 0.0, 0, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO NOTHING
+            """, (user_id, user_name))
+            
+            # Link session
+            cur.execute("UPDATE sessions SET user_id = %s WHERE session_id = %s", (user_id, session_id))
+            conn.commit()
+            
+        return user_id
+
+    def process_message(self, session_id: str, message: str):
         """Main entry point for processing a message."""
         conn = self.get_db_connection()
         try:
-            # 1. Check Biological State
+            # 1. Get Session & Check Identity
+            session = self.get_or_create_session(conn, session_id)
+            user_id = session['user_id']
+            
+            # Identity Resolution State Machine
+            if not user_id:
+                # Check if user is identifying themselves
+                # Patterns: "It's [Name]", "I am [Name]", "[Name]" (if short)
+                name_match = re.search(r"(?:it's|i am|this is)\s+([a-zA-Z]+)", message, re.IGNORECASE)
+                if not name_match and len(message.split()) == 1:
+                     # Assume single word might be a name if we asked "Who is this?"
+                     name_match = re.match(r"([a-zA-Z]+)", message)
+                
+                if name_match:
+                    user_name = name_match.group(1)
+                    user_id = self.link_session_to_user(conn, session_id, user_name)
+                    return {"response": f"Hello {user_name}. I remember you.", "mood": "neutral"}
+                else:
+                    return {"response": "Who is this?", "mood": "curious"}
+
+            # 2. Check Biological State
             bio_state = self.get_biological_state(conn)
             if bio_state["sleep_mode"] or bio_state["adenosine"] > 0.9:
                 return {"response": "Zzz... (The organism is sleeping)", "mood": "asleep"}
 
-            # 2. Update Relationship
+            # 3. Update Relationship (Preserve existing affinity logic)
             rel = self.update_relationship(conn, user_id, affinity_change=0.1)
             affinity = rel['affinity']
             user_name = rel['name']
@@ -212,18 +290,18 @@ class Brain:
             if affinity < -5.0:
                 return {"response": "I don't want to talk to you.", "mood": "hostile"}
 
-            # 3. Handle Auth Commands
+            # 4. Handle Auth Commands (Renaming, Secrets)
             auth_response = self.handle_auth_commands(conn, user_id, message)
             if auth_response:
                 return {"response": auth_response, "mood": "neutral"}
 
-            # 4. Generate Response
+            # 5. Generate Response
             response_text = self.generate_tinker_response(user_name, message)
 
-            # 5. Update State
+            # 6. Update State
             self.update_biological_state(conn)
             
-            # 6. Log Chat
+            # 7. Log Chat
             bio_state_dict = dict(bio_state)
             if 'last_updated' in bio_state_dict:
                 bio_state_dict['last_updated'] = str(bio_state_dict['last_updated'])
