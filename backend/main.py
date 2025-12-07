@@ -2,8 +2,12 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Security
 from fastapi.security.api_key import APIKeyHeader, APIKeyQuery
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from .brain import Brain
-from .voice_router import router as voice_router
+try:
+    from .brain import Brain
+    from .voice_router import router as voice_router
+except ImportError:
+    from brain import Brain
+    from voice_router import router as voice_router
 import os
 from dotenv import load_dotenv
 
