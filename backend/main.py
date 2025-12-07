@@ -2,14 +2,32 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Security
 from fastapi.security.api_key import APIKeyHeader, APIKeyQuery
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from brain import Brain
-from voice_router import router as voice_router
+from .brain import Brain
+from .voice_router import router as voice_router
 import os
 from dotenv import load_dotenv
 
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+import logging
+
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.error(f"Validation Error: {exc}")
+    logger.error(f"Request Body: {body.decode()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode()},
+    )
 
 # --- Security ---
 API_KEY_NAME = "X-API-Key"
@@ -64,7 +82,7 @@ def read_root():
     return brain.status()
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, api_key: str = Depends(get_api_key)):
+def chat(request: ChatRequest):
     try:
         result = brain.process_message(request.user_id, request.message)
         return ChatResponse(response=result["response"], mood=result["mood"])
