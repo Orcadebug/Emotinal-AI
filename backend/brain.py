@@ -202,10 +202,16 @@ class Brain:
             if result.sequences:
                 generated_tokens = result.sequences[0].tokens
                 response_text = self.tokenizer.decode(generated_tokens)
+                
                 # Clean up response
                 clean_response = response_text.replace("Caz:", "").strip()
                 # Remove excessive colons or punctuation loops
-                clean_response = re.sub(r'[:]{2,}', ':', clean_response)
+                clean_response = re.sub(r'[:]{2,}', '', clean_response) # Remove multiple colons entirely
+                clean_response = clean_response.strip(" :") # Trim leading/trailing colons
+                
+                if not clean_response:
+                    return "..."
+                    
                 return clean_response
             else:
                 return "..."
