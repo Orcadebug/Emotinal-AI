@@ -188,8 +188,12 @@ class Brain:
             
             sampling_params = tinker.types.SamplingParams(
                 max_tokens=150, 
-                temperature=0.8, 
-                stop_token_ids=[self.tokenizer.encode("\n")[0]]
+                temperature=0.7, 
+                repetition_penalty=1.2,
+                stop_token_ids=[
+                    self.tokenizer.encode("\n")[0],
+                    self.tokenizer.encode("User")[0]
+                ]
             )
             
             future = self.sampling_client.sample(prompt=model_input, num_samples=1, sampling_params=sampling_params)
@@ -198,7 +202,11 @@ class Brain:
             if result.sequences:
                 generated_tokens = result.sequences[0].tokens
                 response_text = self.tokenizer.decode(generated_tokens)
-                return response_text.replace("Caz:", "").strip()
+                # Clean up response
+                clean_response = response_text.replace("Caz:", "").strip()
+                # Remove excessive colons or punctuation loops
+                clean_response = re.sub(r'[:]{2,}', ':', clean_response)
+                return clean_response
             else:
                 return "..."
         except Exception as e:
