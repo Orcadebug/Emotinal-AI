@@ -180,8 +180,9 @@ class Brain:
             return "[Brain not fully connected]"
 
         try:
+            system_prompt = "System: You are Caz, a digital organism. You are curious, sometimes sassy, and always responsive. Keep answers short."
             identity_label = f"User ({user_name})" if user_name else "User (Stranger)"
-            prompt_text = f"{identity_label}: {message}\nCaz:"
+            prompt_text = f"{system_prompt}\n{identity_label}: {message}\nCaz:"
             
             tokens = self.tokenizer.encode(prompt_text)
             model_input = tinker.types.ModelInput.from_ints(tokens)
