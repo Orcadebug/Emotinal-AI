@@ -324,6 +324,12 @@ class Brain:
             session = self.get_or_create_session(conn, session_id)
             user_id = session['user_id']
             
+            # --- Chat Commands (Bypass Sleep) ---
+            clean_msg = message.strip().upper()
+            if clean_msg in ["WAKE UP", "WAKE", "RESET"]:
+                if self.wake_up():
+                    return {"response": "*Yawn*... I'm awake now. What's up?", "mood": "awake"}
+
             # Identity Resolution State Machine
             if not user_id:
                 # Check if user is identifying themselves
