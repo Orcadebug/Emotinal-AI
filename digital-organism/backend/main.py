@@ -1,0 +1,130 @@
+from fastapi import FastAPI, HTTPException, Depends, Request, Security, BackgroundTasks
+import asyncio
+from fastapi.security.api_key import APIKeyHeader, APIKeyQuery
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+try:
+    from .brain import Brain
+    from .voice_router import router as voice_router
+except ImportError:
+    from brain import Brain
+    from voice_router import router as voice_router
+import os
+from dotenv import load_dotenv
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+import logging
+
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI()
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.error(f"Validation Error: {exc}")
+    logger.error(f"Request Body: {body.decode()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode()},
+    )
+
+# --- Security ---
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+api_key_query = APIKeyQuery(name="key", auto_error=False)
+
+BRAIN_API_KEY = os.environ.get("BRAIN_API_KEY")
+
+async def get_api_key(
+    api_key_header: str = Security(api_key_header),
+    api_key_query: str = Security(api_key_query),
+):
+    if not BRAIN_API_KEY:
+        # If no key set on server, allow all (dev mode)
+        return True
+        
+    if api_key_header == BRAIN_API_KEY or api_key_query == BRAIN_API_KEY:
+        return api_key_header or api_key_query
+        
+    raise HTTPException(
+        status_code=403,
+        detail="Could not validate credentials",
+    )
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize Brain
+brain = Brain()
+app.state.brain = brain
+
+app.include_router(voice_router)
+
+# --- Background Tasks ---
+async def adenosine_decay_loop():
+    """Background task to decay adenosine over time."""
+    while True:
+        try:
+            await asyncio.sleep(60) # Run every minute
+            conn = brain.get_db_connection()
+            try:
+                # Decay by 0.2% per minute (~12% per hour)
+                new_level = brain.update_biological_state(conn, adenosine_change=-0.002)
+                
+                # Auto-wake if rested
+                state = brain.get_biological_state(conn)
+                if state and state['sleep_mode'] and state['adenosine'] < 0.1:
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE biological_state SET sleep_mode = FALSE, last_updated = CURRENT_TIMESTAMP")
+                        conn.commit()
+                    logger.info("Organism woke up naturally (adenosine < 0.1).")
+                    
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"Error in decay loop: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(adenosine_decay_loop())
+
+# --- Models ---
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str
+
+class ChatResponse(BaseModel):
+    response: str
+    mood: str
+
+# --- Routes ---
+@app.get("/")
+def read_root():
+    return brain.status()
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(request: ChatRequest):
+    try:
+        result = brain.process_message(request.user_id, request.message)
+        return ChatResponse(response=result["response"], mood=result["mood"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/wake")
+def wake_organism(authorized: bool = Depends(get_api_key)):
+    """Force wake the organism (Admin only)."""
+    if brain.wake_up():
+        return {"status": "woken", "message": "The organism is now awake and alert."}
+    raise HTTPException(status_code=500, detail="Failed to wake organism")

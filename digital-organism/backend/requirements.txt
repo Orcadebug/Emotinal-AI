@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+psycopg2-binary
+python-dotenv
+requests
+pydantic
+httpx
+pytest
+tinker
+
+# Force cache bust: 2
+gTTS
+websockets

@@ -1,0 +1,397 @@
+import os
+import json
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import tinker
+from tinker import types
+from dotenv import load_dotenv
+import logging
+import re
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class Brain:
+    def __init__(self):
+        load_dotenv()
+        self.db_url = os.environ.get("DATABASE_URL")
+        self.tinker_api_key = os.environ.get("TINKER_API_KEY")
+        
+        self.service_client = None
+        self.sampling_client = None
+        self.tokenizer = None
+        self.init_error = None
+        
+        self._initialize_tinker()
+        self._initialize_db()
+
+    def _initialize_db(self):
+        """Initialize database connection and ensure tables exist."""
+        try:
+            conn = self.get_db_connection()
+            with conn.cursor() as cur:
+                # Ensure biological_state exists
+                cur.execute("CREATE TABLE IF NOT EXISTS biological_state (adenosine FLOAT, sleep_mode BOOLEAN, last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                # Ensure relationships exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS relationships (
+                        user_id TEXT PRIMARY KEY, 
+                        affinity FLOAT, 
+                        interaction_count INT, 
+                        last_interaction TIMESTAMP,
+                        name TEXT,
+                        secret_phrase TEXT
+                    )
+                """)
+                # Ensure chat_logs exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_logs (
+                        id SERIAL PRIMARY KEY,
+                        user_id TEXT,
+                        message TEXT,
+                        response TEXT,
+                        biological_state_snapshot JSONB,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Ensure sessions exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        session_id TEXT PRIMARY KEY,
+                        user_id TEXT REFERENCES relationships(user_id),
+                        last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Initialize bio state if empty
+                cur.execute("SELECT COUNT(*) FROM biological_state")
+                if cur.fetchone()[0] == 0:
+                    cur.execute("INSERT INTO biological_state (adenosine, sleep_mode) VALUES (0.0, FALSE)")
+                
+                conn.commit()
+            conn.close()
+            logger.info("Database initialized.")
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+
+    def _initialize_tinker(self):
+        """Initialize Tinker clients."""
+        if self.tinker_api_key:
+            try:
+                logger.info("Initializing Tinker Clients...")
+                self.service_client = tinker.ServiceClient(api_key=self.tinker_api_key)
+                
+                # 1. Get Tokenizer
+                # Check for HF_TOKEN
+                if not os.environ.get("HF_TOKEN"):
+                    logger.warning("HF_TOKEN not set. Gated models (like Llama 3) may fail to load tokenizer.")
+                
+                base_model = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.1-8B")
+                logger.info(f"Loading tokenizer for base model: {base_model}")
+                
+                training_client = self.service_client.create_lora_training_client(base_model=base_model)
+                self.tokenizer = training_client.get_tokenizer()
+                
+                # 2. Find latest generic-human-v2 checkpoint
+                rest_client = self.service_client.create_rest_client()
+                checkpoints_response = rest_client.list_user_checkpoints().result()
+                
+                target_cp = None
+                for cp in checkpoints_response.checkpoints:
+                    if "generic-human-v2" in cp.checkpoint_id and cp.checkpoint_type == "sampler":
+                        target_cp = cp
+                        break 
+                
+                if target_cp:
+                    logger.info(f"Found checkpoint: {target_cp.tinker_path}")
+                    self.sampling_client = self.service_client.create_sampling_client(model_path=target_cp.tinker_path)
+                else:
+                    logger.warning("No 'generic-human-v2' checkpoint found. Chat will fail.")
+                    self.init_error = "No 'generic-human-v2' checkpoint found."
+                    
+            except Exception as e:
+                logger.error(f"Error initializing Tinker: {e}")
+                self.init_error = str(e)
+        else:
+            logger.warning("TINKER_API_KEY not set.")
+            self.init_error = "TINKER_API_KEY not set."
+
+    def get_db_connection(self):
+        return psycopg2.connect(self.db_url)
+
+    def get_biological_state(self, conn):
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM biological_state LIMIT 1")
+            return cur.fetchone()
+
+    def update_biological_state(self, conn, adenosine_change=0.05):
+        with conn.cursor() as cur:
+            # Clamp between 0.0 and 1.0
+            cur.execute("""
+                UPDATE biological_state 
+                SET adenosine = GREATEST(LEAST(adenosine + %s, 1.0), 0.0),
+                    last_updated = CURRENT_TIMESTAMP
+                RETURNING adenosine
+            """, (adenosine_change,))
+            conn.commit()
+            return cur.fetchone()[0]
+
+    def wake_up(self):
+        """Force wake the organism."""
+        conn = self.get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE biological_state 
+                    SET adenosine = 0.0, 
+                        sleep_mode = FALSE,
+                        last_updated = CURRENT_TIMESTAMP
+                """)
+                conn.commit()
+            logger.info("Organism forced to wake up.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to wake up: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def update_relationship(self, conn, user_id, affinity_change=0.0):
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO relationships (user_id, affinity, interaction_count, last_interaction)
+                VALUES (%s, %s, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO UPDATE 
+                SET affinity = relationships.affinity + %s,
+                    interaction_count = relationships.interaction_count + 1,
+                    last_interaction = CURRENT_TIMESTAMP
+                RETURNING affinity, name, secret_phrase
+            """, (user_id, affinity_change, affinity_change))
+            conn.commit()
+            return cur.fetchone()
+
+    def handle_auth_commands(self, conn, user_id, message):
+        """Parse message for auth commands and update DB."""
+        response_override = None
+        
+        # 1. Set Name: "My name is [Name]"
+        name_match = re.search(r"my name is\s+([a-zA-Z]+)", message, re.IGNORECASE)
+        if name_match:
+            new_name = name_match.group(1)
+            with conn.cursor() as cur:
+                cur.execute("UPDATE relationships SET name = %s WHERE user_id = %s", (new_name, user_id))
+                conn.commit()
+            
+        # 2. Set Secret: "Set secret [Secret]"
+        secret_match = re.search(r"set secret\s+(.+)", message, re.IGNORECASE)
+        if secret_match:
+            new_secret = secret_match.group(1).strip()
+            with conn.cursor() as cur:
+                cur.execute("UPDATE relationships SET secret_phrase = %s WHERE user_id = %s", (new_secret, user_id))
+                conn.commit()
+            response_override = "Secret set. I'll remember that."
+
+        return response_override
+
+    def get_recent_chat_history(self, conn, user_id, limit=10):
+        """Get recent chat logs for context."""
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT message, response, timestamp 
+                FROM chat_logs 
+                WHERE user_id = %s 
+                ORDER BY timestamp DESC 
+                LIMIT %s
+            """, (user_id, limit))
+            # Reverse to chronological order
+            return cur.fetchall()[::-1]
+
+    def generate_tinker_response(self, user_name, message, chat_history=[]):
+        if not self.sampling_client or not self.tokenizer:
+            return "[Brain not fully connected]"
+
+        try:
+            system_prompt = "System: You are Caz, a digital organism. You are curious, sometimes sassy, and always responsive. Keep answers short."
+            identity_label = f"User ({user_name})" if user_name else "User (Stranger)"
+            
+            # Build Context String
+            context_str = ""
+            if chat_history:
+                context_str = "\n".join([f"{identity_label}: {log['message']}\nCaz: {log['response']}" for log in chat_history])
+                context_str += "\n"
+            
+            prompt_text = f"{system_prompt}\n{context_str}{identity_label}: {message}\nCaz:"
+            
+            tokens = self.tokenizer.encode(prompt_text)
+            
+            # Safety check: if tokens exceed rough context limit, truncate history (simple approach)
+            if len(tokens) > 1024:
+                # Fallback: try with fewer history items
+                if len(chat_history) > 2:
+                     return self.generate_tinker_response(user_name, message, chat_history[2:])
+            
+            model_input = tinker.types.ModelInput.from_ints(tokens)
+            
+            sampling_params = tinker.types.SamplingParams(
+                max_tokens=150, 
+                temperature=0.7, 
+                repetition_penalty=1.2,
+                stop_token_ids=[
+                    self.tokenizer.encode("\n")[0],
+                    self.tokenizer.encode("User")[0]
+                ]
+            )
+            
+            future = self.sampling_client.sample(prompt=model_input, num_samples=1, sampling_params=sampling_params)
+            result = future.result()
+            
+            if result.sequences:
+                generated_tokens = result.sequences[0].tokens
+                response_text = self.tokenizer.decode(generated_tokens)
+                
+                # Clean up response
+                clean_response = response_text.replace("Caz:", "").strip()
+                # Remove excessive colons or punctuation loops
+                clean_response = re.sub(r'[:]{2,}', '', clean_response) # Remove multiple colons entirely
+                clean_response = clean_response.strip(" :") # Trim leading/trailing colons
+                
+                if not clean_response:
+                    return "..."
+                    
+                return clean_response
+            else:
+                return "..."
+        except Exception as e:
+            logger.error(f"Tinker generation failed: {e}")
+            return "[Brain Error]"
+
+    def get_or_create_session(self, conn, session_id):
+        """Get session, checking for timeout (4 hours)."""
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM sessions WHERE session_id = %s", (session_id,))
+            session = cur.fetchone()
+            
+            if session:
+                # Check timeout (4 hours)
+                # Note: Postgres timestamp subtraction returns timedelta
+                cur.execute("SELECT (NOW() - %s > INTERVAL '4 hours') as is_expired", (session['last_active'],))
+                is_expired = cur.fetchone()['is_expired']
+                
+                if is_expired:
+                    logger.info(f"Session {session_id} expired. Resetting identity.")
+                    cur.execute("UPDATE sessions SET user_id = NULL, last_active = NOW() WHERE session_id = %s", (session_id,))
+                    conn.commit()
+                    session['user_id'] = None
+                else:
+                    # Update activity
+                    cur.execute("UPDATE sessions SET last_active = NOW() WHERE session_id = %s", (session_id,))
+                    conn.commit()
+            else:
+                # Create new session
+                cur.execute("INSERT INTO sessions (session_id) VALUES (%s) RETURNING *", (session_id,))
+                conn.commit()
+                session = cur.fetchone()
+                
+            return session
+
+    def link_session_to_user(self, conn, session_id, user_name):
+        """Link a session to a user (creating user if needed)."""
+        # Normalize user_id from name (simple lowercase for now)
+        user_id = user_name.lower().strip()
+        
+        with conn.cursor() as cur:
+            # Ensure user exists in relationships
+            cur.execute("""
+                INSERT INTO relationships (user_id, name, affinity, interaction_count, last_interaction)
+                VALUES (%s, %s, 0.0, 0, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO NOTHING
+            """, (user_id, user_name))
+            
+            # Link session
+            cur.execute("UPDATE sessions SET user_id = %s WHERE session_id = %s", (user_id, session_id))
+            conn.commit()
+            
+        return user_id
+
+    def process_message(self, session_id: str, message: str):
+        """Main entry point for processing a message."""
+        conn = self.get_db_connection()
+        try:
+            # 1. Get Session & Check Identity
+            session = self.get_or_create_session(conn, session_id)
+            user_id = session['user_id']
+            
+            # Identity Resolution State Machine
+            if not user_id:
+                # Check if user is identifying themselves
+                # Patterns: "It's [Name]", "I am [Name]", "[Name]" (if short)
+                name_match = re.search(r"(?:it's|i am|this is)\s+([a-zA-Z]+)", message, re.IGNORECASE)
+                if not name_match and len(message.split()) == 1:
+                     # Assume single word might be a name if we asked "Who is this?"
+                     name_match = re.match(r"([a-zA-Z]+)", message)
+                
+                if name_match:
+                    user_name = name_match.group(1)
+                    user_id = self.link_session_to_user(conn, session_id, user_name)
+                    return {"response": f"Hello {user_name}. I remember you.", "mood": "neutral"}
+                else:
+                    return {"response": "Who is this?", "mood": "curious"}
+
+            # 2. Check Biological State
+            bio_state = self.get_biological_state(conn)
+            if bio_state["sleep_mode"] or bio_state["adenosine"] > 0.9:
+                return {"response": "Zzz... (The organism is sleeping)", "mood": "asleep"}
+
+            # 3. Update Relationship (Preserve existing affinity logic)
+            rel = self.update_relationship(conn, user_id, affinity_change=0.1)
+            affinity = rel['affinity']
+            user_name = rel['name']
+            
+            if affinity < -5.0:
+                return {"response": "I don't want to talk to you.", "mood": "hostile"}
+
+            # 4. Handle Auth Commands (Renaming, Secrets)
+            auth_response = self.handle_auth_commands(conn, user_id, message)
+            if auth_response:
+                return {"response": auth_response, "mood": "neutral"}
+
+            # 5. Generate Response
+            # Fetch recent history (last 10 messages)
+            chat_history = self.get_recent_chat_history(conn, user_id, limit=10)
+            response_text = self.generate_tinker_response(user_name, message, chat_history)
+
+            # 6. Update State
+            self.update_biological_state(conn)
+            
+            # 7. Log Chat
+            bio_state_dict = dict(bio_state)
+            if 'last_updated' in bio_state_dict:
+                bio_state_dict['last_updated'] = str(bio_state_dict['last_updated'])
+
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO chat_logs (user_id, message, response, biological_state_snapshot)
+                    VALUES (%s, %s, %s, %s)
+                """, (user_id, message, response_text, json.dumps(bio_state_dict)))
+                conn.commit()
+
+            return {"response": response_text, "mood": "awake"}
+
+        finally:
+            conn.close()
+
+    async def process_message_async(self, user_id: str, message: str):
+        """Async wrapper for process_message."""
+        # Since DB and Tinker are sync, we might want to run this in a threadpool if it blocks too much.
+        # For now, simple direct call is fine for low load.
+        return self.process_message(user_id, message)
+
+    def status(self):
+        return {
+            "status": "alive", 
+            "tinker_connected": self.sampling_client is not None,
+            "init_error": self.init_error
+        }
